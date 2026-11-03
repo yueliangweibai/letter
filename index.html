@@ -79,13 +79,23 @@
     margin-left:-23px;margin-top:-23px;
     border-radius:50%;
     background:radial-gradient(circle at 35% 30%,#f093a6,var(--rose-deep));
-    box-shadow:0 3px 10px rgba(200,90,120,.4);
+    box-shadow:0 3px 10px rgba(200,90,120,.40);
     display:flex;align-items:center;justify-content:center;
     color:#fff;font-size:19px;z-index:4;
-    transition:opacity .35s ease, transform .35s ease;
-    font-family:"华文宋体",serif;
+    font-family:"华文宋体","STSong",serif;
+    cursor:pointer;
+    transition:transform .18s ease;
   }
   .seal::after{content:"♡"}
+  .seal:active{transform:scale(.94)}
+
+  @keyframes sealFall{
+    0%  {transform:none;opacity:1}
+    16% {transform:translateY(-6px) rotate(-6deg) scale(1.08)}
+    58% {transform:translateY(72px) rotate(14deg) scale(.96);opacity:.85}
+    100%{transform:translateY(210px) rotate(32deg) scale(.72);opacity:0}
+  }
+  .seal.break{animation:sealFall .78s cubic-bezier(.45,.05,.7,1) forwards;pointer-events:none}
 
   .tap-hint{
     margin-top:7vh;font-size:15px;color:var(--ink-soft);opacity:.7;
@@ -95,13 +105,13 @@
   @keyframes breathe{0%,100%{opacity:.35}50%{opacity:.8}}
 
   .opened .flap{transform:rotateX(-172deg)}
-  .opened .seal{opacity:0;transform:scale(.6)}
   .opened .tap-hint{opacity:0;transition:opacity .3s}
 
   /* ---------- 信纸场景 ---------- */
   .letter-scene{
     position:fixed;inset:0;z-index:3;
-    background:linear-gradient(170deg,#fff8f4 0%,#fff3f1 45%,#ffeef1 100%);
+    /* 半透明，让背后的花瓣透出来 */
+    background:linear-gradient(170deg,rgba(255,248,244,.40) 0%,rgba(255,243,241,.33) 45%,rgba(255,238,241,.44) 100%);
     opacity:0;pointer-events:none;
     transition:opacity 1s ease;
     overflow-y:auto;-webkit-overflow-scrolling:touch;
@@ -197,10 +207,10 @@
   <div class="envelope-wrap" id="envelopeWrap">
     <div class="envelope">
       <div class="flap"></div>
-      <div class="seal"></div>
     </div>
+    <div class="seal" id="seal"></div>
   </div>
-  <div class="tap-hint">轻 触 打 开</div>
+  <div class="tap-hint" id="tapHint">轻 触 打 开</div>
 </div>
 
 <!-- ============ 信纸 ============ -->
@@ -414,7 +424,7 @@ function play(){
 /* ================= 音乐 ================= */
 const bgm = document.getElementById('bgm');
 const bgmBtn = document.getElementById('bgmBtn');
-let bgmStarted = false, bgmOn = true, fadeTimer = null;
+let bgmStarted = false, bgmOn = true, fadeTimer = null, pauseTimer = null;
 
 function fadeTo(target, ms){
   clearInterval(fadeTimer);
@@ -431,6 +441,7 @@ function fadeTo(target, ms){
 function startBgm(){
   if (bgmStarted) return;
   bgmStarted = true;
+  bgm.muted = false;
   try { bgm.volume = 0; bgm.play(); } catch (e) {}
   fadeTo(0.55, 2000);
   setTimeout(() => bgmBtn.classList.add('show'), 1400);
@@ -438,18 +449,27 @@ function startBgm(){
 
 // iOS 微信：桥就绪后再补一次播放
 document.addEventListener('WeixinJSBridgeReady', () => {
-  if (bgmStarted && bgm.paused) { try { bgm.play(); } catch (e) {} }
+  if (bgmStarted && bgm.paused && bgmOn) { try { bgm.play(); } catch (e) {} }
 }, false);
 
 bgmBtn.addEventListener('click', (e) => {
   e.stopPropagation();
+  e.preventDefault();
   bgmOn = !bgmOn;
   bgmBtn.classList.toggle('off', !bgmOn);
+
   if (bgmOn){
+    clearTimeout(pauseTimer);
+    bgm.muted = false;                    // 关键：iOS 不认 volume，只认 muted
     if (bgm.paused) { try { bgm.play(); } catch (err) {} }
     fadeTo(0.55, 700);
   } else {
     fadeTo(0, 450);
+    clearTimeout(pauseTimer);
+    // 淡出只是听觉上的体面；真正静音靠 muted + pause，全平台有效
+    pauseTimer = setTimeout(() => {
+      if (!bgmOn) { bgm.muted = true; try { bgm.pause(); } catch (err) {} }
+    }, 470);
   }
 });
 
@@ -457,23 +477,36 @@ bgmBtn.addEventListener('click', (e) => {
 const scene = document.getElementById('scene');
 const letterScene = document.getElementById('letterScene');
 const wrap = document.getElementById('envelopeWrap');
+const seal = document.getElementById('seal');
 let opened = false;
 
 function open(){
   if (opened) return;
   opened = true;
   startBgm();
-  wrap.classList.add('opened');
+
+  // 1) 火漆脱落
+  seal.classList.add('break');
+
+  // 2) 封盖翻开
+  setTimeout(() => wrap.classList.add('opened'), 430);
+
+  // 3) 信纸淡入
   setTimeout(() => {
     scene.classList.add('hide');
     letterScene.classList.add('show');
     letterScene.scrollTop = 0;
     build();
-    if (INSTANT) { queue.forEach(e => e.classList.add('in')); document.getElementById('petalMore').classList.add('show'); }
-    else setTimeout(play, 420);
-  }, 900);
+    if (INSTANT) {
+      queue.forEach(e => e.classList.add('in'));
+      document.getElementById('petalMore').classList.add('show');
+    } else {
+      setTimeout(play, 420);
+    }
+  }, 1330);
 }
 
+seal.addEventListener('click', (e) => { e.stopPropagation(); open(); });
 wrap.addEventListener('click', open);
 
 // 直接进入信纸（用于调试/预览）
